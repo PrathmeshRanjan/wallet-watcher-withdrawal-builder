@@ -73,8 +73,8 @@ const migrations = [
         completed_at TEXT,
         error_message TEXT
       );
-    `
-  }
+    `,
+  },
 ] as const;
 
 export function runMigrations(sqlite: Database.Database): void {
@@ -89,18 +89,20 @@ export function runMigrations(sqlite: Database.Database): void {
     sqlite
       .prepare("SELECT version FROM schema_migrations")
       .all()
-      .map((row) => (row as { version: number }).version)
+      .map((row) => (row as { version: number }).version),
   );
 
   const apply = sqlite.transaction((version: number, sql: string) => {
     sqlite.exec(sql);
     sqlite
-      .prepare("INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)")
+      .prepare(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+      )
       .run(version, new Date().toISOString());
   });
 
   for (const migration of migrations) {
-    if (!applied.has(migration.version)) apply(migration.version, migration.sql);
+    if (!applied.has(migration.version))
+      apply(migration.version, migration.sql);
   }
 }
-

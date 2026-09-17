@@ -6,8 +6,8 @@ import "./styles.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false }
-  }
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
 });
 
 createRoot(document.getElementById("root")!).render(
@@ -15,6 +15,5 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <App />
     </QueryClientProvider>
-  </StrictMode>
+  </StrictMode>,
 );
-

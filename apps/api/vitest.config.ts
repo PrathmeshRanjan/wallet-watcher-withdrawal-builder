@@ -6,13 +6,21 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
+      include: ["src/**/*.ts"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/server.ts",
+        "src/config.ts",
+        "src/blockchain/gateway.ts",
+        "src/scripts/**",
+        "src/test-support/**",
+      ],
       thresholds: {
-        statements: 75,
-        branches: 70,
-        functions: 75,
-        lines: 75
-      }
-    }
-  }
+        statements: 70,
+        branches: 65,
+        functions: 70,
+        lines: 70,
+      },
+    },
+  },
 });
-

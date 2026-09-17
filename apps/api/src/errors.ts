@@ -3,7 +3,7 @@ export class AppError extends Error {
     message: string,
     readonly statusCode: number,
     readonly code: string,
-    readonly details?: unknown
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = "AppError";
@@ -39,4 +39,3 @@ export class UpstreamError extends AppError {
     super(message, 502, "UPSTREAM_ERROR");
   }
 }
-

@@ -9,7 +9,7 @@ function loadEnvironmentFile(): void {
   const candidates = [
     process.env.ENV_FILE,
     resolve(process.cwd(), ".env"),
-    resolve(process.cwd(), "../../.env")
+    resolve(process.cwd(), "../../.env"),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   const envFile = candidates.find(existsSync);
@@ -17,7 +17,9 @@ function loadEnvironmentFile(): void {
 }
 
 const environmentSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
   HD_MNEMONIC: z.string().trim().min(1, "HD_MNEMONIC is required"),
   BASE_SEPOLIA_RPC_URL: z.url().default("https://sepolia.base.org"),
   WALLET_COUNT: z.coerce.number().int().min(1).max(20).default(3),
@@ -25,9 +27,11 @@ const environmentSchema = z.object({
   DATABASE_PATH: z.string().min(1).default("./data/wallet-watcher.db"),
   HOST: z.string().min(1).default("127.0.0.1"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  LOG_LEVEL: z
+    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+    .default("info"),
   ADMIN_API_KEY: z.string().min(12).optional().or(z.literal("")),
-  CORS_ORIGINS: z.string().default("http://localhost:5173")
+  CORS_ORIGINS: z.string().default("http://localhost:5173"),
 });
 
 export type AppConfig = {
@@ -44,7 +48,9 @@ export type AppConfig = {
   corsOrigins: string[];
 };
 
-export function getConfig(overrides: Partial<NodeJS.ProcessEnv> = {}): AppConfig {
+export function getConfig(
+  overrides: Partial<NodeJS.ProcessEnv> = {},
+): AppConfig {
   loadEnvironmentFile();
   const parsed = environmentSchema.parse({ ...process.env, ...overrides });
 
@@ -59,7 +65,8 @@ export function getConfig(overrides: Partial<NodeJS.ProcessEnv> = {}): AppConfig
     port: parsed.PORT,
     logLevel: parsed.LOG_LEVEL,
     ...(parsed.ADMIN_API_KEY ? { adminApiKey: parsed.ADMIN_API_KEY } : {}),
-    corsOrigins: parsed.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
+    corsOrigins: parsed.CORS_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   };
 }
-

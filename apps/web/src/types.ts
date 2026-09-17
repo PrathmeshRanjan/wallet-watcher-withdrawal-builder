@@ -47,7 +47,11 @@ export type Withdrawal = {
 
 export type BalanceChange = {
   id: string;
-  kind: "INITIAL_BALANCE" | "INFLOW" | "WITHDRAWAL_BROADCAST" | "UNCLASSIFIED_DECREASE";
+  kind:
+    | "INITIAL_BALANCE"
+    | "INFLOW"
+    | "WITHDRAWAL_BROADCAST"
+    | "UNCLASSIFIED_DECREASE";
   delta: { wei: string; eth: string };
   previousBalanceWei: string | null;
   newBalanceWei: string | null;
@@ -55,4 +59,3 @@ export type BalanceChange = {
   txHash: string | null;
   detectedAt: string;
 };
-

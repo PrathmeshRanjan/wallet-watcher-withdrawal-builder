@@ -9,7 +9,10 @@ export type DerivedWallet = {
   derivationPath: string;
 };
 
-export function deriveWallets(mnemonicPhrase: string, count: number): DerivedWallet[] {
+export function deriveWallets(
+  mnemonicPhrase: string,
+  count: number,
+): DerivedWallet[] {
   if (!Number.isInteger(count) || count < 1 || count > 20) {
     throw new RangeError("Wallet count must be an integer between 1 and 20");
   }
@@ -28,7 +31,7 @@ export class WalletService {
   constructor(
     private readonly db: AppDatabase,
     private readonly mnemonicPhrase: string,
-    readonly walletCount: number
+    readonly walletCount: number,
   ) {
     this.derivedWallets = deriveWallets(mnemonicPhrase, walletCount);
   }
@@ -36,10 +39,17 @@ export class WalletService {
   initialize(): void {
     const now = new Date().toISOString();
     for (const wallet of this.derivedWallets) {
-      const existing = this.db.select().from(wallets).where(eq(wallets.walletIndex, wallet.index)).get();
-      if (existing && existing.address.toLowerCase() !== wallet.address.toLowerCase()) {
+      const existing = this.db
+        .select()
+        .from(wallets)
+        .where(eq(wallets.walletIndex, wallet.index))
+        .get();
+      if (
+        existing &&
+        existing.address.toLowerCase() !== wallet.address.toLowerCase()
+      ) {
         throw new Error(
-          `HD_MNEMONIC does not match the existing database at wallet index ${wallet.index}; use the original mnemonic or a fresh database`
+          `HD_MNEMONIC does not match the existing database at wallet index ${wallet.index}; use the original mnemonic or a fresh database`,
         );
       }
     }
@@ -53,7 +63,7 @@ export class WalletService {
             derivationPath: wallet.derivationPath,
             active: true,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
           })
           .onConflictDoUpdate({
             target: wallets.walletIndex,
@@ -61,8 +71,8 @@ export class WalletService {
               address: wallet.address,
               derivationPath: wallet.derivationPath,
               active: true,
-              updatedAt: now
-            }
+              updatedAt: now,
+            },
           })
           .run();
       }
@@ -70,13 +80,19 @@ export class WalletService {
   }
 
   getSigner(walletIndex: number): HDNodeWallet {
-    if (!Number.isInteger(walletIndex) || walletIndex < 0 || walletIndex >= this.walletCount) {
-      throw new RangeError(`Wallet index must be between 0 and ${this.walletCount - 1}`);
+    if (
+      !Number.isInteger(walletIndex) ||
+      walletIndex < 0 ||
+      walletIndex >= this.walletCount
+    ) {
+      throw new RangeError(
+        `Wallet index must be between 0 and ${this.walletCount - 1}`,
+      );
     }
     return HDNodeWallet.fromPhrase(
       this.mnemonicPhrase,
       undefined,
-      this.derivedWallets[walletIndex]!.derivationPath
+      this.derivedWallets[walletIndex]!.derivationPath,
     );
   }
 
@@ -84,7 +100,9 @@ export class WalletService {
     return this.db
       .select()
       .from(wallets)
-      .where(and(eq(wallets.walletIndex, walletIndex), eq(wallets.active, true)))
+      .where(
+        and(eq(wallets.walletIndex, walletIndex), eq(wallets.active, true)),
+      )
       .get();
   }
 
@@ -98,11 +116,16 @@ export class WalletService {
         balanceWei: walletBalances.balanceWei,
         blockNumber: walletBalances.blockNumber,
         blockHash: walletBalances.blockHash,
-        observedAt: walletBalances.observedAt
+        observedAt: walletBalances.observedAt,
       })
       .from(wallets)
       .leftJoin(walletBalances, eq(wallets.id, walletBalances.walletId))
-      .where(and(eq(wallets.active, true), lt(wallets.walletIndex, this.walletCount)))
+      .where(
+        and(
+          eq(wallets.active, true),
+          lt(wallets.walletIndex, this.walletCount),
+        ),
+      )
       .orderBy(asc(wallets.walletIndex))
       .all();
   }

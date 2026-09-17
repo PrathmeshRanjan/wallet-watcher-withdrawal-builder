@@ -16,6 +16,7 @@ if (existsSync(envPath)) {
   const generated = template.replace("HD_MNEMONIC=", `HD_MNEMONIC=${mnemonic}`);
   writeFileSync(envPath, generated, { encoding: "utf8", mode: 0o600 });
   chmodSync(envPath, 0o600);
-  process.stdout.write("Created a testnet-only .env with permissions 0600. It is ignored by Git.\n");
+  process.stdout.write(
+    "Created a testnet-only .env with permissions 0600. It is ignored by Git.\n",
+  );
 }
-

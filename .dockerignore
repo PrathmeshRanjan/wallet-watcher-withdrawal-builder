@@ -1,0 +1,9 @@
+.git
+.env
+node_modules
+**/node_modules
+**/dist
+coverage
+data
+*.db*
+Take-Home Assignment*.pdf

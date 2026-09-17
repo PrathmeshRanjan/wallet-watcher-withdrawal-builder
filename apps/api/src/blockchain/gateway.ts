@@ -15,7 +15,11 @@ export interface ChainGateway {
   getBalance(address: string, blockNumber?: number): Promise<bigint>;
   getPendingNonce(address: string): Promise<number>;
   getFeeQuote(): Promise<FeeQuote>;
-  estimateNativeTransferGas(from: string, to: string, value: bigint): Promise<bigint>;
+  estimateNativeTransferGas(
+    from: string,
+    to: string,
+    value: bigint,
+  ): Promise<bigint>;
   broadcastTransaction(signedTransaction: string): Promise<string>;
   transactionExists(hash: string): Promise<boolean>;
   getReceipt(hash: string): Promise<ReceiptSummary | null>;
@@ -25,7 +29,9 @@ export class EthersChainGateway implements ChainGateway {
   private readonly provider: JsonRpcProvider;
 
   constructor(rpcUrl: string) {
-    this.provider = new JsonRpcProvider(rpcUrl, undefined, { staticNetwork: false });
+    this.provider = new JsonRpcProvider(rpcUrl, undefined, {
+      staticNetwork: false,
+    });
   }
 
   async getChainId(): Promise<bigint> {
@@ -34,7 +40,8 @@ export class EthersChainGateway implements ChainGateway {
 
   async getLatestBlock(): Promise<BlockReference> {
     const block = await this.provider.getBlock("latest");
-    if (!block || !block.hash) throw new Error("RPC did not return a canonical latest block");
+    if (!block || !block.hash)
+      throw new Error("RPC did not return a canonical latest block");
     return { number: block.number, hash: block.hash };
   }
 
@@ -53,11 +60,15 @@ export class EthersChainGateway implements ChainGateway {
     }
     return {
       maxFeePerGas: fees.maxFeePerGas,
-      maxPriorityFeePerGas: fees.maxPriorityFeePerGas
+      maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
     };
   }
 
-  estimateNativeTransferGas(from: string, to: string, value: bigint): Promise<bigint> {
+  estimateNativeTransferGas(
+    from: string,
+    to: string,
+    value: bigint,
+  ): Promise<bigint> {
     return this.provider.estimateGas({ from, to, value, data: "0x" });
   }
 
@@ -70,13 +81,14 @@ export class EthersChainGateway implements ChainGateway {
   }
 
   async getReceipt(hash: string): Promise<ReceiptSummary | null> {
-    const receipt: TransactionReceipt | null = await this.provider.getTransactionReceipt(hash);
+    const receipt: TransactionReceipt | null =
+      await this.provider.getTransactionReceipt(hash);
     if (!receipt) return null;
     return {
       status: receipt.status,
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed,
-      gasPrice: receipt.gasPrice
+      gasPrice: receipt.gasPrice,
     };
   }
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { ChainGateway } from "../blockchain/gateway.js";
 import type { AppDatabase } from "../database/client.js";
@@ -8,7 +8,7 @@ import {
   syncRuns,
   walletBalances,
   wallets,
-  withdrawals
+  withdrawals,
 } from "../database/schema.js";
 import type { WalletService } from "../wallets/wallet-service.js";
 
@@ -23,19 +23,24 @@ export class BalanceTracker {
     private readonly walletService: WalletService,
     private readonly gateway: ChainGateway,
     private readonly intervalMs: number,
-    private readonly logger: FastifyBaseLogger
+    private readonly logger: FastifyBaseLogger,
   ) {}
 
   async validateNetwork(): Promise<void> {
     const chainId = await this.gateway.getChainId();
     if (chainId !== 84_532n) {
-      throw new Error(`RPC chain mismatch: expected Base Sepolia 84532, received ${chainId}`);
+      throw new Error(
+        `RPC chain mismatch: expected Base Sepolia 84532, received ${chainId}`,
+      );
     }
   }
 
   async start(): Promise<void> {
     await this.trySync("startup");
-    this.timer = setInterval(() => void this.trySync("interval"), this.intervalMs);
+    this.timer = setInterval(
+      () => void this.trySync("interval"),
+      this.intervalMs,
+    );
     this.timer.unref();
   }
 
@@ -63,7 +68,10 @@ export class BalanceTracker {
     this.running = true;
     const runId = randomUUID();
     const startedAt = new Date().toISOString();
-    this.db.insert(syncRuns).values({ id: runId, status: "RUNNING", startedAt }).run();
+    this.db
+      .insert(syncRuns)
+      .values({ id: runId, status: "RUNNING", startedAt })
+      .run();
 
     try {
       await this.validateNetwork();
@@ -73,7 +81,9 @@ export class BalanceTracker {
       const block = await this.gateway.getLatestBlock();
       const managedWallets = this.walletService.listWallets();
       const observedBalances = await Promise.all(
-        managedWallets.map((wallet) => this.gateway.getBalance(wallet.address, block.number))
+        managedWallets.map((wallet) =>
+          this.gateway.getBalance(wallet.address, block.number),
+        ),
       );
       const observedAt = new Date().toISOString();
 
@@ -93,7 +103,7 @@ export class BalanceTracker {
                 balanceWei: balance.toString(),
                 blockNumber: block.number,
                 blockHash: block.hash,
-                observedAt
+                observedAt,
               })
               .run();
             if (balance > 0n) {
@@ -105,7 +115,7 @@ export class BalanceTracker {
                   deltaWei: balance.toString(),
                   newBalanceWei: balance.toString(),
                   blockNumber: block.number,
-                  detectedAt: observedAt
+                  detectedAt: observedAt,
                 })
                 .run();
             }
@@ -115,18 +125,34 @@ export class BalanceTracker {
           const previous = BigInt(existing.balanceWei);
           if (previous !== balance) {
             const delta = balance - previous;
-            tx.insert(balanceChanges)
-              .values({
-                id: randomUUID(),
-                walletId: wallet.id,
-                kind: delta > 0n ? "INFLOW" : "UNCLASSIFIED_DECREASE",
-                deltaWei: delta.toString(),
-                previousBalanceWei: previous.toString(),
-                newBalanceWei: balance.toString(),
-                blockNumber: block.number,
-                detectedAt: observedAt
-              })
-              .run();
+            const knownWithdrawal =
+              delta < 0n
+                ? tx
+                    .select({ id: withdrawals.id })
+                    .from(withdrawals)
+                    .where(
+                      and(
+                        eq(withdrawals.walletId, wallet.id),
+                        gte(withdrawals.broadcastAt, existing.observedAt),
+                      ),
+                    )
+                    .limit(1)
+                    .get()
+                : undefined;
+            if (!knownWithdrawal) {
+              tx.insert(balanceChanges)
+                .values({
+                  id: randomUUID(),
+                  walletId: wallet.id,
+                  kind: delta > 0n ? "INFLOW" : "UNCLASSIFIED_DECREASE",
+                  deltaWei: delta.toString(),
+                  previousBalanceWei: previous.toString(),
+                  newBalanceWei: balance.toString(),
+                  blockNumber: block.number,
+                  detectedAt: observedAt,
+                })
+                .run();
+            }
           }
 
           tx.update(walletBalances)
@@ -134,14 +160,18 @@ export class BalanceTracker {
               balanceWei: balance.toString(),
               blockNumber: block.number,
               blockHash: block.hash,
-              observedAt
+              observedAt,
             })
             .where(eq(walletBalances.walletId, wallet.id))
             .run();
         });
 
         tx.update(syncRuns)
-          .set({ status: "SUCCEEDED", blockNumber: block.number, completedAt: observedAt })
+          .set({
+            status: "SUCCEEDED",
+            blockNumber: block.number,
+            completedAt: observedAt,
+          })
           .where(eq(syncRuns.id, runId))
           .run();
       });
@@ -151,7 +181,8 @@ export class BalanceTracker {
         .set({
           status: "FAILED",
           completedAt: new Date().toISOString(),
-          errorMessage: error instanceof Error ? error.message : "Unknown sync failure"
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown sync failure",
         })
         .where(eq(syncRuns.id, runId))
         .run();
@@ -170,14 +201,16 @@ export class BalanceTracker {
       .limit(1)
       .get();
     const lastSuccessAt = latest?.completedAt ?? null;
-    const stale = !lastSuccessAt || Date.now() - new Date(lastSuccessAt).getTime() > TEN_MINUTES_MS;
+    const stale =
+      !lastSuccessAt ||
+      Date.now() - new Date(lastSuccessAt).getTime() > TEN_MINUTES_MS;
     return {
       status: stale ? "degraded" : "ok",
       stale,
       lastSuccessAt,
       lastObservedBlock: latest?.blockNumber ?? null,
       pollingIntervalSeconds: this.intervalMs / 1_000,
-      syncInProgress: this.running
+      syncInProgress: this.running,
     } as const;
   }
 
@@ -190,7 +223,12 @@ export class BalanceTracker {
 
     for (const candidate of candidates) {
       if (await this.gateway.transactionExists(candidate.txHash)) {
-        this.markBroadcast(candidate.id, candidate.walletId, candidate.amountWei, candidate.txHash);
+        this.markBroadcast(
+          candidate.id,
+          candidate.walletId,
+          candidate.amountWei,
+          candidate.txHash,
+        );
       }
     }
   }
@@ -212,18 +250,28 @@ export class BalanceTracker {
           state: receipt.status === 1 ? "CONFIRMED" : "REVERTED",
           confirmedAt: now,
           actualFeeWei: (receipt.gasUsed * receipt.gasPrice).toString(),
-          updatedAt: now
+          updatedAt: now,
         })
         .where(eq(withdrawals.id, withdrawal.id))
         .run();
     }
   }
 
-  private markBroadcast(id: string, walletId: number, amountWei: string, txHash: string): void {
+  private markBroadcast(
+    id: string,
+    walletId: number,
+    amountWei: string,
+    txHash: string,
+  ): void {
     const now = new Date().toISOString();
     this.db.transaction((tx) => {
       tx.update(withdrawals)
-        .set({ state: "BROADCAST", broadcastAt: now, errorMessage: null, updatedAt: now })
+        .set({
+          state: "BROADCAST",
+          broadcastAt: now,
+          errorMessage: null,
+          updatedAt: now,
+        })
         .where(eq(withdrawals.id, id))
         .run();
       tx.insert(balanceChanges)
@@ -234,7 +282,7 @@ export class BalanceTracker {
           deltaWei: (-BigInt(amountWei)).toString(),
           txHash,
           withdrawalId: id,
-          detectedAt: now
+          detectedAt: now,
         })
         .onConflictDoNothing({ target: balanceChanges.withdrawalId })
         .run();

@@ -1,0 +1,16 @@
+services:
+  vaultline:
+    build: .
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_PATH: /data/wallet-watcher.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - vaultline-data:/data
+    restart: unless-stopped
+
+volumes:
+  vaultline-data:

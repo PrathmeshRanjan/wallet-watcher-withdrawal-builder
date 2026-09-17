@@ -16,7 +16,9 @@ if (existsSync(webDist)) {
   await app.register(fastifyStatic, { root: webDist });
   app.setNotFoundHandler((request, reply) => {
     if (request.url.startsWith("/api/") || request.url.startsWith("/docs")) {
-      return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Route was not found" } });
+      return reply
+        .status(404)
+        .send({ error: { code: "NOT_FOUND", message: "Route was not found" } });
     }
     return reply.sendFile("index.html");
   });
@@ -25,7 +27,7 @@ if (existsSync(webDist)) {
 await app.listen({ host: config.host, port: config.port });
 app.log.info(
   { network: "base-sepolia", chainId: 84532, walletCount: config.walletCount },
-  "Vaultline is ready"
+  "Vaultline is ready",
 );
 await balanceTracker.start();
 
@@ -39,4 +41,3 @@ const shutdown = async (signal: string) => {
 
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
-

@@ -32,7 +32,9 @@ export type BuiltNativeTransfer = {
   hash: string;
 };
 
-export async function buildSignedNativeTransfer(input: NativeTransferInput): Promise<BuiltNativeTransfer> {
+export async function buildSignedNativeTransfer(
+  input: NativeTransferInput,
+): Promise<BuiltNativeTransfer> {
   const chainId = input.chainId ?? BASE_SEPOLIA_CHAIN_ID;
   const request = {
     type: 2,
@@ -43,32 +45,39 @@ export async function buildSignedNativeTransfer(input: NativeTransferInput): Pro
     gasLimit: input.gasLimit,
     maxFeePerGas: input.maxFeePerGas,
     maxPriorityFeePerGas: input.maxPriorityFeePerGas,
-    data: "0x"
+    data: "0x",
   } as const;
 
   const signedTransaction = await input.signer.signTransaction(request);
   const parsed = Transaction.from(signedTransaction);
-  if (!parsed.signature || !parsed.hash || parsed.from?.toLowerCase() !== input.signer.address.toLowerCase()) {
+  if (
+    !parsed.signature ||
+    !parsed.hash ||
+    parsed.from?.toLowerCase() !== input.signer.address.toLowerCase()
+  ) {
     throw new Error("Signed transaction failed signer verification");
   }
 
   return {
     transaction: {
-      ...request,
+      type: 2,
+      chainId,
+      nonce: input.nonce,
       from: input.signer.address,
+      to: input.to,
       valueWei: input.value.toString(),
       gasLimit: input.gasLimit.toString(),
       maxFeePerGas: input.maxFeePerGas.toString(),
-      maxPriorityFeePerGas: input.maxPriorityFeePerGas.toString()
+      maxPriorityFeePerGas: input.maxPriorityFeePerGas.toString(),
+      data: "0x",
     },
     unsignedPayload: parsed.unsignedSerialized,
     signedTransaction,
     signature: {
       r: parsed.signature.r,
       s: parsed.signature.s,
-      yParity: parsed.signature.yParity
+      yParity: parsed.signature.yParity,
     },
-    hash: parsed.hash
+    hash: parsed.hash,
   };
 }
-

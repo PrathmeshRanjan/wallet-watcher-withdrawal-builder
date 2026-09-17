@@ -3,16 +3,23 @@ import { desc, eq } from "drizzle-orm";
 import { formatEther, getAddress, parseEther } from "ethers";
 import type { ChainGateway } from "../blockchain/gateway.js";
 import type { AppDatabase } from "../database/client.js";
-import { balanceChanges, withdrawals, type WithdrawalRow } from "../database/schema.js";
+import {
+  balanceChanges,
+  withdrawals,
+  type WithdrawalRow,
+} from "../database/schema.js";
 import {
   ConflictError,
   InsufficientFundsError,
   NotFoundError,
   UpstreamError,
-  ValidationError
+  ValidationError,
 } from "../errors.js";
 import type { WalletService } from "../wallets/wallet-service.js";
-import { BASE_SEPOLIA_CHAIN_ID, buildSignedNativeTransfer } from "./transaction-builder.js";
+import {
+  BASE_SEPOLIA_CHAIN_ID,
+  buildSignedNativeTransfer,
+} from "./transaction-builder.js";
 
 export type CreateWithdrawalInput = {
   walletIndex: number;
@@ -49,7 +56,7 @@ export class WithdrawalService {
   constructor(
     private readonly db: AppDatabase,
     private readonly walletService: WalletService,
-    private readonly gateway: ChainGateway
+    private readonly gateway: ChainGateway,
   ) {}
 
   create(input: CreateWithdrawalInput): Promise<WithdrawalRow> {
@@ -62,12 +69,17 @@ export class WithdrawalService {
           .get();
         if (existing) {
           this.assertIdempotentMatch(existing, input);
-          return input.broadcast && existing.state === "BUILT" ? this.broadcast(existing.id) : existing;
+          return input.broadcast && existing.state === "BUILT"
+            ? this.broadcast(existing.id)
+            : existing;
         }
       }
 
       const walletRow = this.walletService.getWalletRow(input.walletIndex);
-      if (!walletRow) throw new NotFoundError(`Active wallet ${input.walletIndex} was not found`);
+      if (!walletRow)
+        throw new NotFoundError(
+          `Active wallet ${input.walletIndex} was not found`,
+        );
 
       let to: string;
       let amountWei: bigint;
@@ -77,31 +89,45 @@ export class WithdrawalService {
       } catch {
         throw new ValidationError("Destination or ETH amount is invalid");
       }
-      if (amountWei <= 0n) throw new ValidationError("Withdrawal amount must be greater than zero");
+      if (amountWei <= 0n)
+        throw new ValidationError(
+          "Withdrawal amount must be greater than zero",
+        );
       if (to.toLowerCase() === walletRow.address.toLowerCase()) {
-        throw new ValidationError("Destination must differ from the source wallet");
+        throw new ValidationError(
+          "Destination must differ from the source wallet",
+        );
       }
 
       const chainId = await this.gateway.getChainId();
       if (chainId !== BigInt(BASE_SEPOLIA_CHAIN_ID)) {
-        throw new UpstreamError(`RPC chain mismatch: expected ${BASE_SEPOLIA_CHAIN_ID}, received ${chainId}`);
+        throw new UpstreamError(
+          `RPC chain mismatch: expected ${BASE_SEPOLIA_CHAIN_ID}, received ${chainId}`,
+        );
       }
 
       const signer = this.walletService.getSigner(input.walletIndex);
       const [balance, nonce, fees] = await Promise.all([
         this.gateway.getBalance(signer.address),
         this.gateway.getPendingNonce(signer.address),
-        this.gateway.getFeeQuote()
+        this.gateway.getFeeQuote(),
       ]);
-      const estimatedGas = await this.gateway.estimateNativeTransferGas(signer.address, to, amountWei);
+      const estimatedGas = await this.gateway.estimateNativeTransferGas(
+        signer.address,
+        to,
+        amountWei,
+      );
       const gasLimit = (estimatedGas * 120n + 99n) / 100n;
       const maximumFeeWei = gasLimit * fees.maxFeePerGas;
       if (amountWei + maximumFeeWei > balance) {
-        throw new InsufficientFundsError("Balance cannot cover the amount plus maximum network fee", {
-          balanceWei: balance.toString(),
-          amountWei: amountWei.toString(),
-          maximumFeeWei: maximumFeeWei.toString()
-        });
+        throw new InsufficientFundsError(
+          "Balance cannot cover the amount plus maximum network fee",
+          {
+            balanceWei: balance.toString(),
+            amountWei: amountWei.toString(),
+            maximumFeeWei: maximumFeeWei.toString(),
+          },
+        );
       }
 
       const built = await buildSignedNativeTransfer({
@@ -111,7 +137,7 @@ export class WithdrawalService {
         nonce,
         gasLimit,
         maxFeePerGas: fees.maxFeePerGas,
-        maxPriorityFeePerGas: fees.maxPriorityFeePerGas
+        maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
       });
       const now = new Date().toISOString();
       const id = randomUUID();
@@ -137,7 +163,7 @@ export class WithdrawalService {
           txHash: built.hash,
           state: "BUILT",
           createdAt: now,
-          updatedAt: now
+          updatedAt: now,
         })
         .run();
 
@@ -147,12 +173,17 @@ export class WithdrawalService {
 
   async broadcast(id: string): Promise<WithdrawalRow> {
     const withdrawal = this.getById(id);
-    if (["BROADCAST", "CONFIRMED", "REVERTED"].includes(withdrawal.state)) return withdrawal;
+    if (["BROADCAST", "CONFIRMED", "REVERTED"].includes(withdrawal.state))
+      return withdrawal;
 
     try {
-      const returnedHash = await this.gateway.broadcastTransaction(withdrawal.signedTransaction);
+      const returnedHash = await this.gateway.broadcastTransaction(
+        withdrawal.signedTransaction,
+      );
       if (returnedHash.toLowerCase() !== withdrawal.txHash.toLowerCase()) {
-        throw new Error("RPC returned a transaction hash different from the signed payload hash");
+        throw new Error(
+          "RPC returned a transaction hash different from the signed payload hash",
+        );
       }
       this.markBroadcast(withdrawal);
       return this.getById(id);
@@ -162,8 +193,9 @@ export class WithdrawalService {
         .update(withdrawals)
         .set({
           state: "FAILED",
-          errorMessage: error instanceof Error ? error.message : "Broadcast failed",
-          updatedAt: now
+          errorMessage:
+            error instanceof Error ? error.message : "Broadcast failed",
+          updatedAt: now,
         })
         .where(eq(withdrawals.id, id))
         .run();
@@ -172,20 +204,34 @@ export class WithdrawalService {
   }
 
   getById(id: string): WithdrawalRow {
-    const withdrawal = this.db.select().from(withdrawals).where(eq(withdrawals.id, id)).get();
+    const withdrawal = this.db
+      .select()
+      .from(withdrawals)
+      .where(eq(withdrawals.id, id))
+      .get();
     if (!withdrawal) throw new NotFoundError("Withdrawal was not found");
     return withdrawal;
   }
 
   list(limit = 50): WithdrawalRow[] {
-    return this.db.select().from(withdrawals).orderBy(desc(withdrawals.createdAt)).limit(limit).all();
+    return this.db
+      .select()
+      .from(withdrawals)
+      .orderBy(desc(withdrawals.createdAt))
+      .limit(limit)
+      .all();
   }
 
   private markBroadcast(withdrawal: WithdrawalRow): void {
     const now = new Date().toISOString();
     this.db.transaction((tx) => {
       tx.update(withdrawals)
-        .set({ state: "BROADCAST", broadcastAt: now, errorMessage: null, updatedAt: now })
+        .set({
+          state: "BROADCAST",
+          broadcastAt: now,
+          errorMessage: null,
+          updatedAt: now,
+        })
         .where(eq(withdrawals.id, withdrawal.id))
         .run();
       tx.insert(balanceChanges)
@@ -196,14 +242,17 @@ export class WithdrawalService {
           deltaWei: (-BigInt(withdrawal.amountWei)).toString(),
           txHash: withdrawal.txHash,
           withdrawalId: withdrawal.id,
-          detectedAt: now
+          detectedAt: now,
         })
         .onConflictDoNothing({ target: balanceChanges.withdrawalId })
         .run();
     });
   }
 
-  private assertIdempotentMatch(existing: WithdrawalRow, input: CreateWithdrawalInput): void {
+  private assertIdempotentMatch(
+    existing: WithdrawalRow,
+    input: CreateWithdrawalInput,
+  ): void {
     const wallet = this.walletService.getWalletRow(input.walletIndex);
     let normalizedDestination: string;
     let amountWei: string;
@@ -219,12 +268,17 @@ export class WithdrawalService {
       existing.toAddress !== normalizedDestination ||
       existing.amountWei !== amountWei
     ) {
-      throw new ConflictError("Idempotency key has already been used for a different withdrawal");
+      throw new ConflictError(
+        "Idempotency key has already been used for a different withdrawal",
+      );
     }
   }
 }
 
-export function serializeWithdrawal(row: WithdrawalRow, includeSignedPayload = true) {
+export function serializeWithdrawal(
+  row: WithdrawalRow,
+  includeSignedPayload = true,
+) {
   return {
     id: row.id,
     state: row.state,
@@ -239,20 +293,22 @@ export function serializeWithdrawal(row: WithdrawalRow, includeSignedPayload = t
       gasLimit: row.gasLimit,
       maxFeePerGas: row.maxFeePerGas,
       maxPriorityFeePerGas: row.maxPriorityFeePerGas,
-      data: "0x"
+      data: "0x",
     },
     unsignedPayload: row.unsignedPayload,
-    ...(includeSignedPayload ? { signedTransaction: row.signedTransaction } : {}),
+    ...(includeSignedPayload
+      ? { signedTransaction: row.signedTransaction }
+      : {}),
     signature: {
       r: row.signatureR,
       s: row.signatureS,
-      yParity: row.signatureYParity
+      yParity: row.signatureYParity,
     },
     txHash: row.txHash,
     actualFeeWei: row.actualFeeWei,
     error: row.errorMessage,
     createdAt: row.createdAt,
     broadcastAt: row.broadcastAt,
-    confirmedAt: row.confirmedAt
+    confirmedAt: row.confirmedAt,
   };
 }
