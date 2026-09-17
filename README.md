@@ -187,6 +187,40 @@ Tests use a fake Base gateway and in-memory SQLite database. They do not require
 
 Use a second generated wallet as the destination so the inflow and outflow are both visible in the dashboard.
 
+### Verified Base Sepolia evidence
+
+The walkthrough above was completed end to end on Base Sepolia on 18 September 2026. The manual checks covered stable wallet derivation while changing the active count, polling and restart catch-up, aggregate inflows, build-only semantics, broadcasting, receipt reconciliation, fee reservation, idempotency, bearer authentication, and configuration guards.
+
+One withdrawal was first built and signed without broadcasting. At that point its state was `BUILT`, its broadcast and confirmation timestamps were `null`, the source balance was unchanged, and no outflow had been recorded. The same stored payload was then broadcast through `POST /api/v1/withdrawals/{id}/broadcast` and reconciled to `CONFIRMED`:
+
+```json
+{
+  "id": "84d29e23-c348-4f54-943d-24765925ff42",
+  "state": "CONFIRMED",
+  "network": "base-sepolia",
+  "chainId": 84532,
+  "from": "0xe6A65471A14B03eefb0DC952F0395966c5b79600",
+  "to": "0x72865E83dFeF9AC6De92948401dE5e81cDD46777",
+  "amount": { "wei": "1000000000000000", "eth": "0.001" },
+  "transaction": {
+    "type": 2,
+    "nonce": 0,
+    "gasLimit": "25200",
+    "maxFeePerGas": "11000000",
+    "maxPriorityFeePerGas": "1000000",
+    "data": "0x"
+  },
+  "txHash": "0x42004aa0297c310f14064acb01e991a0f37402627fd65103d5fe4cbe2f99ef9e",
+  "actualFeeWei": "139596513000",
+  "broadcastAt": "2026-09-17T18:24:23.964Z",
+  "confirmedAt": "2026-09-17T18:25:01.421Z"
+}
+```
+
+The successful transaction is independently visible on [BaseScan](https://sepolia.basescan.org/tx/0x42004aa0297c310f14064acb01e991a0f37402627fd65103d5fe4cbe2f99ef9e). The original build-only response also contained the unsigned EIP-1559 payload, raw signed transaction, `r`/`s`/`yParity` signature, and the same deterministic transaction hash. The raw payload is omitted here because signed transactions should be treated as sensitive until mined or superseded.
+
+During validation testing, a numeric `amountEth` exposed Fastify's default request coercion. Body coercion is now disabled and a regression test proves that amounts must remain decimal strings, preserving the exact-precision API contract.
+
 ## Docker
 
 After creating `.env`:
