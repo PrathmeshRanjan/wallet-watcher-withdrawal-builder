@@ -1,0 +1,23 @@
+{
+  "name": "wallet-watcher-withdrawal-builder",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "concurrently -n api,web -c cyan,magenta \"pnpm --filter @wallet-watcher/api dev\" \"pnpm --filter @wallet-watcher/web dev\"",
+    "start": "pnpm --filter @wallet-watcher/api start",
+    "setup": "pnpm --filter @wallet-watcher/api setup",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage",
+    "typecheck": "pnpm -r typecheck",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2"
+  }
+}
+
