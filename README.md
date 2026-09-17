@@ -1,8 +1,17 @@
 # Vaultline — Wallet Watcher and Withdrawal Builder
 
+[![CI](https://github.com/PrathmeshRanjan/wallet-watcher-withdrawal-builder/actions/workflows/ci.yml/badge.svg)](https://github.com/PrathmeshRanjan/wallet-watcher-withdrawal-builder/actions/workflows/ci.yml)
+![Node.js 24](https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Network](https://img.shields.io/badge/network-Base%20Sepolia-0052FF)
+
 A testnet-only custody backend slice for deterministic Base Sepolia wallets. Vaultline derives indexed wallets, persists block-pinned native ETH balances, records balance activity, and builds or broadcasts signed EIP-1559 withdrawals. A responsive operations dashboard and interactive OpenAPI documentation are included.
 
 > **Safety:** Base Sepolia only. Never use a mnemonic that controls mainnet funds. The service rejects RPC endpoints that do not report chain ID `84532`.
+
+![Vaultline dashboard showing deterministic wallets, live balances, and service health](docs/images/dashboard-overview.jpg)
+
+_The operations dashboard shows block-pinned balances, derivation order, reconciliation health, activity, and withdrawal state in one view._
 
 ## Architecture
 
@@ -79,6 +88,10 @@ The Vite development server proxies `/api` and `/docs` to Fastify. In production
 Changing `HD_MNEMONIC` while reusing a populated database is rejected because it would silently associate old history with new addresses. Use the original mnemonic or a fresh database.
 
 ## API
+
+![Swagger UI showing the Vaultline system, wallet, and withdrawal endpoints](docs/images/swagger-api-overview.jpg)
+
+Interactive OpenAPI documentation is available at `http://127.0.0.1:3000/docs` while the service is running.
 
 ### List wallets
 
@@ -157,35 +170,142 @@ The signed transaction is stored before broadcasting. Its hash is deterministic,
 
 ## Testing
 
-Run the full local verification suite:
+### Automated acceptance suite
+
+Run the complete local gate from the repository root:
 
 ```bash
 pnpm check
 ```
 
-Individual commands:
+This runs strict type checking, 14 deterministic backend tests, and production builds for both applications. No RPC connection or testnet funds are required. For more detail:
 
 ```bash
 pnpm test
 pnpm test:coverage
-pnpm typecheck
-pnpm build
 pnpm format:check
 ```
 
 Tests use a fake Base gateway and in-memory SQLite database. They do not require funds, secrets, or network connectivity. Coverage includes deterministic derivation vectors, prefix stability, database identity protection, signed-transaction recovery, 18-decimal precision, fee reservation, build-only semantics, idempotent broadcast logging, pinned-block balance reads, and aggregate inflows.
 
-### Manual Base Sepolia walkthrough
+### Manual end-to-end test
 
-1. Run `pnpm run setup`, then `pnpm dev`.
-2. Open the dashboard and copy Wallet 1’s address.
-3. Fund it from a Base Sepolia faucet linked from the [official Base faucet guide](https://docs.base.org/base-chain/tools/network-faucets).
-4. Click **Sync now** or wait for the next poll. The balance and inflow should appear.
-5. Choose **New withdrawal** and select **Build only**. Inspect the returned hash, signature, and raw transaction. No outflow should appear.
-6. Create another withdrawal with **Build & broadcast**. Verify its BaseScan link and the `WITHDRAWAL_BROADCAST` activity entry.
-7. After the next poll, confirm the wallet balance and receipt state update.
+Start with `pnpm dev`, then use the dashboard, Swagger UI, and a second terminal. All funds in this procedure are Base Sepolia test ETH.
 
-Use a second generated wallet as the destination so the inflow and outflow are both visible in the dashboard.
+#### 1. Health, UI, and API
+
+1. Open the dashboard at `http://localhost:5173` and Swagger UI at `http://127.0.0.1:3000/docs`.
+2. Confirm the dashboard reports **Base Sepolia 84532**, a healthy reconciliation, and the configured wallet count.
+3. Select each wallet and verify ordered derivation paths ending in `/0`, `/1`, `/2`, and so on.
+4. Click **Sync now**, then confirm the health and wallet endpoints from a terminal:
+
+```bash
+curl http://127.0.0.1:3000/api/v1/health
+curl http://127.0.0.1:3000/api/v1/wallets
+```
+
+Every wallet in one response should have the same observation block number and hash.
+
+#### 2. Deterministic wallet count
+
+1. Record the current addresses returned by `GET /api/v1/wallets`.
+2. Stop the service, set `WALLET_COUNT=5` in `.env`, and restart. The original prefix must remain unchanged and two addresses must be appended.
+3. Repeat with `WALLET_COUNT=2`. Only the original first two wallets should remain active.
+4. Restore the desired count and restart. Do not change `HD_MNEMONIC`.
+
+#### 3. Deposits, polling, and persistence
+
+1. Copy a managed address and fund it from a faucet listed in the [official Base faucet guide](https://docs.base.org/base-chain/tools/network-faucets).
+2. After the transaction confirms, click **Sync now** or wait for the poll. The balance should update and activity should contain one positive `INFLOW`.
+3. Inspect exact wei and activity data:
+
+```bash
+curl http://127.0.0.1:3000/api/v1/wallets
+curl http://127.0.0.1:3000/api/v1/wallets/0/changes
+```
+
+4. Restart the service. The persisted balance should return and reconciliation must not duplicate the inflow.
+5. To test aggregation, temporarily set `POLL_INTERVAL_SECONDS=300`, send two transfers to the same wallet before the next sync, then reconcile once. One `INFLOW` equal to the net sum should be recorded.
+6. To test downtime recovery, stop the service, send a testnet deposit, wait for confirmation, and restart. Startup reconciliation should detect one aggregate inflow immediately. Restore the polling interval afterward.
+
+#### 4. Build-only and broadcast withdrawals
+
+![Withdrawal builder with build-only and broadcast modes](docs/images/withdrawal-builder.jpg)
+
+1. Select a funded source wallet, click **New withdrawal**, and use another managed wallet as the destination.
+2. Choose **Build only**. The result must show **Signed, not broadcast**, a hash, raw signed transaction, nonce, gas limit, and signature parity.
+3. Confirm the source balance and activity did not change. `GET /api/v1/withdrawals/{id}` should report `BUILT` with `broadcastAt`, `confirmedAt`, and `actualFeeWei` set to `null`.
+4. Broadcast that stored transaction with `POST /api/v1/withdrawals/{id}/broadcast`, or create a new withdrawal using **Build & broadcast**.
+5. Verify the BaseScan link, one `WITHDRAWAL_BROADCAST` entry on the source, and one `INFLOW` on a managed destination.
+6. After confirmation, click **Sync now**. The withdrawal should move from `BROADCAST` to `CONFIRMED` and include the actual fee and confirmation timestamp.
+7. Call the broadcast endpoint again with the same ID. It must return the stored result without sending or logging a duplicate.
+
+#### 5. Swagger validation and idempotency
+
+Expand `POST /api/v1/withdrawals`, click **Try it out**, and begin with:
+
+```json
+{
+  "walletIndex": 0,
+  "to": "<another managed address>",
+  "amountEth": "0.00001",
+  "broadcast": false,
+  "idempotencyKey": "manual-check-001"
+}
+```
+
+Repeat the identical request. It must return the same withdrawal ID and hash. Reuse the key with a different amount and expect `409 CONFLICT`.
+
+<details>
+<summary>Swagger idempotency-conflict example</summary>
+
+<img src="docs/images/swagger-idempotency-conflict.jpg" width="430" alt="Swagger UI returning a 409 idempotency conflict" />
+
+</details>
+
+The following negative cases must create no withdrawal or balance activity:
+
+| Case                               | Expected result                                 |
+| ---------------------------------- | ----------------------------------------------- |
+| Invalid destination                | `400 VALIDATION_ERROR`                          |
+| Numeric `amountEth`                | `400`; amounts must be exact decimal strings    |
+| More than 18 decimal places        | `400 VALIDATION_ERROR`                          |
+| Zero amount                        | `400`; amount must be greater than zero         |
+| Destination equals source          | `400`; self-transfer rejected                   |
+| Amount plus maximum fee > balance  | `422 INSUFFICIENT_FUNDS` with exact wei details |
+| Same idempotency key, changed body | `409 CONFLICT`                                  |
+| Missing wallet                     | `404 NOT_FOUND`                                 |
+
+#### 6. Optional API protection
+
+Set `ADMIN_API_KEY` to a value of at least 12 characters and restart. Reads remain public, but mutations must reject missing credentials:
+
+```bash
+curl -i -X POST http://127.0.0.1:3000/api/v1/tracking/sync
+
+curl -i -X POST \
+  -H "Authorization: Bearer $ADMIN_API_KEY" \
+  http://127.0.0.1:3000/api/v1/tracking/sync
+```
+
+Expect `401 UNAUTHORIZED` first and `200` with `"completed": true` second. The dashboard's **Access** control supplies the same key for UI mutations.
+
+#### 7. Configuration guards
+
+- `WALLET_COUNT=0` or `21` must stop startup validation; the supported range is 1–20.
+- Reusing the database with a different `HD_MNEMONIC` must fail before wallet metadata is changed.
+- Pointing the service at a chain other than `84532` must prevent tracking and withdrawal construction.
+- `.env`, database files, raw coverage, and build output must remain untracked.
+
+### Acceptance checklist
+
+- [x] Deterministic, prefix-stable wallet generation
+- [x] Block-pinned balance polling within the 10-minute requirement
+- [x] SQLite persistence, restart reconciliation, and aggregate inflows
+- [x] Build-only signed payload with no outflow
+- [x] Optional broadcast, explicit outflow, receipt tracking, and recovery
+- [x] Exact wei arithmetic, EIP-1559 fee reserve, and input validation
+- [x] REST API, Swagger UI, responsive dashboard, Docker, CI, and tests
 
 ### Verified Base Sepolia evidence
 
