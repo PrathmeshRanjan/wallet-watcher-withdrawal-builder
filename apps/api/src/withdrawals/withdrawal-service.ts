@@ -31,13 +31,14 @@ class KeyedMutex {
     const current = new Promise<void>((resolve) => {
       release = resolve;
     });
-    this.tails.set(key, previous.then(() => current));
+    const tail = previous.then(() => current);
+    this.tails.set(key, tail);
     await previous;
     try {
       return await operation();
     } finally {
       release();
-      if (this.tails.get(key) === current) this.tails.delete(key);
+      if (this.tails.get(key) === tail) this.tails.delete(key);
     }
   }
 }
@@ -255,4 +256,3 @@ export function serializeWithdrawal(row: WithdrawalRow, includeSignedPayload = t
     confirmedAt: row.confirmedAt
   };
 }
-

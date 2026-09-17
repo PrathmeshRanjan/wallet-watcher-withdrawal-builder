@@ -34,7 +34,7 @@ export class EthersChainGateway implements ChainGateway {
 
   async getLatestBlock(): Promise<BlockReference> {
     const block = await this.provider.getBlock("latest");
-    if (!block) throw new Error("RPC did not return the latest block");
+    if (!block || !block.hash) throw new Error("RPC did not return a canonical latest block");
     return { number: block.number, hash: block.hash };
   }
 
@@ -80,4 +80,3 @@ export class EthersChainGateway implements ChainGateway {
     };
   }
 }
-

@@ -35,6 +35,14 @@ export class WalletService {
 
   initialize(): void {
     const now = new Date().toISOString();
+    for (const wallet of this.derivedWallets) {
+      const existing = this.db.select().from(wallets).where(eq(wallets.walletIndex, wallet.index)).get();
+      if (existing && existing.address.toLowerCase() !== wallet.address.toLowerCase()) {
+        throw new Error(
+          `HD_MNEMONIC does not match the existing database at wallet index ${wallet.index}; use the original mnemonic or a fresh database`
+        );
+      }
+    }
     this.db.transaction((tx) => {
       tx.update(wallets).set({ active: false, updatedAt: now }).run();
       for (const wallet of this.derivedWallets) {
@@ -99,4 +107,3 @@ export class WalletService {
       .all();
   }
 }
-

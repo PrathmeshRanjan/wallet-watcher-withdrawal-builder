@@ -231,13 +231,11 @@ export async function createApp(
     async (request, reply) => {
       const body = createWithdrawalSchema.parse(request.body);
       const headerKey = request.headers["idempotency-key"];
+      const { idempotencyKey: bodyKey, ...withdrawalInput } = body;
+      const idempotencyKey = typeof headerKey === "string" ? headerKey : bodyKey;
       const row = await withdrawalService.create({
-        ...body,
-        ...(typeof headerKey === "string"
-          ? { idempotencyKey: headerKey }
-          : body.idempotencyKey
-            ? { idempotencyKey: body.idempotencyKey }
-            : {})
+        ...withdrawalInput,
+        ...(idempotencyKey ? { idempotencyKey } : {})
       });
       return reply.status(201).send(serializeWithdrawal(row));
     }
@@ -264,4 +262,3 @@ export async function createApp(
 
   return { app, walletService, withdrawalService, balanceTracker };
 }
-

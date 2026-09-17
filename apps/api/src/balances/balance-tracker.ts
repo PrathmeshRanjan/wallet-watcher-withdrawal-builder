@@ -15,7 +15,7 @@ import type { WalletService } from "../wallets/wallet-service.js";
 export const TEN_MINUTES_MS = 10 * 60 * 1_000;
 
 export class BalanceTracker {
-  private timer?: NodeJS.Timeout;
+  private timer: NodeJS.Timeout | undefined;
   private running = false;
 
   constructor(
@@ -241,4 +241,3 @@ export class BalanceTracker {
     });
   }
 }
-
