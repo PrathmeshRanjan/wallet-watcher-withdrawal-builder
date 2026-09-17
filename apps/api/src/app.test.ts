@@ -108,6 +108,26 @@ describe("HTTP API", () => {
     });
     expect(invalid.statusCode).toBe(400);
 
+    const numericAmount = await context.app.inject({
+      method: "POST",
+      url: "/api/v1/withdrawals",
+      headers: { authorization: "Bearer a-secure-test-key" },
+      payload: {
+        walletIndex: 0,
+        to: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        amountEth: 0.1,
+        broadcast: false,
+      },
+    });
+    expect(numericAmount.statusCode).toBe(400);
+    expect(numericAmount.json()).toMatchObject({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed",
+      },
+    });
+    expect(context.withdrawalService.list()).toHaveLength(0);
+
     const built = await context.app.inject({
       method: "POST",
       url: "/api/v1/withdrawals",

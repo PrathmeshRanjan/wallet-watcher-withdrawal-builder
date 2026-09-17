@@ -52,6 +52,13 @@ export async function createApp(
   const app = Fastify({
     logger: config.nodeEnv === "test" ? false : { level: config.logLevel },
     genReqId: () => randomUUID(),
+    ajv: {
+      customOptions: {
+        // Amounts must remain decimal strings so precision is never lost to
+        // JSON number parsing before ethers converts them to bigint values.
+        coerceTypes: false,
+      },
+    },
   });
 
   await app.register(cors, {
@@ -114,6 +121,20 @@ export async function createApp(
   };
 
   app.setErrorHandler((error, request, reply) => {
+    const schemaError = error as typeof error & {
+      validation?: unknown;
+      validationContext?: string;
+    };
+    if (Array.isArray(schemaError.validation)) {
+      return reply.status(400).send({
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Request validation failed",
+          details: schemaError.validation,
+        },
+        requestId: request.id,
+      });
+    }
     if (error instanceof z.ZodError) {
       return reply.status(400).send({
         error: {
