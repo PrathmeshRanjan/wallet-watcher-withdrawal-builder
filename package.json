@@ -7,7 +7,7 @@
     "build": "pnpm -r build",
     "dev": "concurrently -n api,web -c cyan,magenta \"pnpm --filter @wallet-watcher/api dev\" \"pnpm --filter @wallet-watcher/web dev\"",
     "start": "pnpm --filter @wallet-watcher/api start",
-    "setup": "pnpm --filter @wallet-watcher/api setup",
+    "setup": "pnpm --filter @wallet-watcher/api run setup",
     "test": "pnpm -r test",
     "test:coverage": "pnpm -r test:coverage",
     "typecheck": "pnpm -r typecheck",

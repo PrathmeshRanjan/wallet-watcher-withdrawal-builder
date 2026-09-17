@@ -47,11 +47,11 @@ The API and tracker run in one process but are separate modules. This keeps the 
 
 ```bash
 pnpm install
-pnpm setup
+pnpm run setup
 pnpm dev
 ```
 
-`pnpm setup` creates a testnet-only mnemonic in `.env`, sets file permissions to `0600`, and refuses to overwrite an existing file. `.env` is ignored by Git.
+`pnpm run setup` creates a testnet-only mnemonic in `.env`, sets file permissions to `0600`, and refuses to overwrite an existing file. `.env` is ignored by Git.
 
 Open:
 
@@ -177,7 +177,7 @@ Tests use a fake Base gateway and in-memory SQLite database. They do not require
 
 ### Manual Base Sepolia walkthrough
 
-1. Run `pnpm setup`, then `pnpm dev`.
+1. Run `pnpm run setup`, then `pnpm dev`.
 2. Open the dashboard and copy Wallet 1’s address.
 3. Fund it from a Base Sepolia faucet linked from the [official Base faucet guide](https://docs.base.org/base-chain/tools/network-faucets).
 4. Click **Sync now** or wait for the next poll. The balance and inflow should appear.
